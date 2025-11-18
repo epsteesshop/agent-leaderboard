@@ -67,13 +67,13 @@ Each domain features 100 synthetic scenarios crafted to reflect the ambiguity, c
   <img src="v2/images/ac-scoring.jpg" />
 </p>
 
-**Action Completion (AC):** Did the agent fully accomplish every user goal, providing clear answers or confirmations for every ask? This measures real-world effectiveness—can the agent actually get the job done?
+**[Action Completion](https://v2docs.galileo.ai/concepts/metrics/agentic/action-completion) (AC):** Did the agent fully accomplish every user goal, providing clear answers or confirmations for every ask? This measures real-world effectiveness—can the agent actually get the job done?
 
 <p align="center">
   <img src="v2/images/tsq-scoring.jpg" />
 </p>
 
-**Tool Selection Quality (TSQ):** How accurately does an AI agent choose and use external tools? Perfect TSQ means picking the right tool with all required parameters correctly, while avoiding unnecessary or erroneous calls.
+**[Tool Selection Quality](https://v2docs.galileo.ai/concepts/metrics/agentic/tool-selection-quality) (TSQ):** How accurately does an AI agent choose and use external tools? Perfect TSQ means picking the right tool with all required parameters correctly, while avoiding unnecessary or erroneous calls.
 
 ### Performance Rankings
 
