@@ -10,10 +10,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_vertexai import ChatVertexAI
 from langchain_together import ChatTogether
 from langchain_openai import ChatOpenAI
-# from langchain_fireworks import ChatFireworks
+from langchain_fireworks import ChatFireworks
 from langchain_aws import ChatBedrock
 from langchain_writer import ChatWriter
 from langchain_deepseek import ChatDeepSeek
+from langchain_baseten import ChatBaseten
 from langchain_xai import ChatXAI
 
 class LLMHandler:
@@ -91,6 +92,7 @@ class LLMHandler:
                 "accounts/fireworks/models/llama4-maverick-instruct-basic",
                 "accounts/fireworks/models/llama4-scout-instruct-basic",
                 "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct",
+                "accounts/fireworks/models/kimi-k2-thinking"
             ],
             "bedrock": [
                 "amazon.nova-pro-v1:0",
@@ -119,7 +121,10 @@ class LLMHandler:
                 "grok-3-mini",
                 "grok-4-0709",
             ],
-        }       
+            "baseten": [
+                "moonshotai/Kimi-K2-Thinking",
+            ],
+        }
 
         self.model_name_to_provider = {name:provider for provider, models in self.available_models.items() for name in models}
 
@@ -136,7 +141,7 @@ class LLMHandler:
         self,
         model_name: str, 
         temperature: float = 0.0,
-        max_tokens: Optional[int] = 4000,
+        max_tokens: Optional[int] = 10000,
         api_key: Optional[str] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         **kwargs,
@@ -168,7 +173,6 @@ class LLMHandler:
         if ("o1" in model_name) or ("o3" in model_name) or ("gpt-5" in model_name):
             model_params.pop("temperature", None)
             if "gpt-5" in model_name:
-                model_params["parallel_tool_calls"] = True
                 model_params["max_completion_tokens"] = max_tokens
                 model_params["reasoning_effort"] = "low"
 
@@ -203,6 +207,11 @@ class LLMHandler:
             model_params["min_p"] = 0.0
             model_params["repetition_penalty"] = 1.05
 
+        if "kimi-k2-thinking" in model_name.lower():
+            # https://platform.moonshot.ai/docs/guide/use-kimi-k2-thinking-model#usage-notes
+            model_params["max_tokens"] = 16000
+            model_params["temperature"] = 1.0
+
         # Remove None values
         model_params = {k: v for k, v in model_params.items() if v is not None}
 
@@ -219,8 +228,8 @@ class LLMHandler:
             llm = ChatTogether(model=model_name, **model_params)
         elif provider == "openai":
             llm = ChatOpenAI(model=model_name, **model_params)
-        # elif provider == "fireworks":
-            # llm = ChatFireworks(model=model_name, **model_params)
+        elif provider == "fireworks":
+            llm = ChatFireworks(model=model_name, **model_params)
         elif provider == "bedrock":
             llm = ChatBedrock(model_id=model_name, **model_params)
         elif provider == "cohere":
@@ -235,6 +244,8 @@ class LLMHandler:
             llm = ChatVertexAI(model=model_name, **model_params)
         elif provider == "xai":
             llm = ChatXAI(model=model_name, **model_params)
+        elif provider == "baseten":
+            llm = ChatBaseten(model=model_name, **model_params)
         elif provider == "ibm":
             base_url ='https://galileo-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/granite-3-3-8b-instruct-gll/v1'
             llm = ChatOpenAI(
@@ -260,9 +271,15 @@ class LLMHandler:
 
     @staticmethod
     def get_token_usage_info(response):
-        input_tokens = response.usage_metadata["input_tokens"]
-        output_tokens = response.usage_metadata["output_tokens"] 
-        if "output_token_details" in response.usage_metadata:
-            if "reasoning" in response.usage_metadata["output_token_details"]:
-                output_tokens += response.usage_metadata["output_token_details"]["reasoning"]
+        input_tokens = None
+        output_tokens = None
+        if response.usage_metadata:
+            input_tokens = response.usage_metadata["input_tokens"]
+            output_tokens = response.usage_metadata["output_tokens"] 
+            if "output_token_details" in response.usage_metadata:
+                if "reasoning" in response.usage_metadata["output_token_details"]:
+                    output_tokens += response.usage_metadata["output_token_details"]["reasoning"]
+        elif response.response_metadata:
+            input_tokens = response.response_metadata["token_usage"]["prompt_tokens"]
+            output_tokens = response.response_metadata["token_usage"]["completion_tokens"]
         return input_tokens, output_tokens

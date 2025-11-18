@@ -1,7 +1,8 @@
-galileo==1.4.0
+galileo
 langchain 
+langchain_anthropic
+langchain_baseten
 langchain_openai 
-langchain_anthropic 
 langchain_mistralai 
 langchain_google_genai 
 langchain_together 
