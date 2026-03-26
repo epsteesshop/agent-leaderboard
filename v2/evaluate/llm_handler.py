@@ -16,6 +16,45 @@ from langchain_writer import ChatWriter
 from langchain_deepseek import ChatDeepSeek
 from langchain_baseten import ChatBaseten
 from langchain_xai import ChatXAI
+from langchain_core.messages import BaseMessage, AIMessage
+from langchain_core.outputs import ChatResult, ChatGeneration
+
+class DiddyLLMWrapper(BaseChatModel):
+    """LangChain-compatible wrapper around DiddyAgent so it can be used wherever
+    a BaseChatModel is expected without bypassing DiddyAgent's logic."""
+
+    model_name: str = "diddy"
+
+    @property
+    def _llm_type(self) -> str:
+        return "diddy"
+
+    def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs) -> ChatResult:
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "agents"))
+        from diddy_agent import DiddyAgent as _DiddyAgent
+
+        agent = _DiddyAgent(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+        history = []
+        for m in messages[:-1]:
+            role = "user" if m.type == "human" else "assistant"
+            history.append({"role": role, "content": m.content})
+
+        last_msg = messages[-1].content if messages else ""
+        response_text, tool_calls, metadata = agent.process_turn(
+            conversation_history=history,
+            available_tools=[],
+            current_user_message=last_msg,
+        )
+
+        ai_msg = AIMessage(content=response_text)
+        return ChatResult(generations=[ChatGeneration(message=ai_msg)])
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        return self._generate(messages, stop=stop, **kwargs)
+
+
 
 class LLMHandler:
     """
@@ -27,7 +66,6 @@ class LLMHandler:
             "anthropic": [
                 "claude-3-5-sonnet-20241022",
                 "claude-3-5-haiku-20241022",
-                "diddy",
                 "claude-3-7-sonnet-20250219",
                 "claude-sonnet-4-20250514",
                 "claude-opus-4-20250514",
@@ -127,6 +165,8 @@ class LLMHandler:
             ],
         }
 
+        # Diddy is a custom agent, not a LangChain provider model
+        self.available_models["diddy"] = ["diddy"]
         self.model_name_to_provider = {name:provider for provider, models in self.available_models.items() for name in models}
 
     def _detect_provider(self, model_name: str) -> str:
@@ -219,7 +259,9 @@ class LLMHandler:
         # Create the base LLM
         llm = None
 
-        if provider == "anthropic":
+        if provider == "diddy":
+            llm = DiddyLLMWrapper(model_name=model_name)
+        elif provider == "anthropic":
             llm = ChatAnthropic(model_name=model_name, **model_params)
         elif provider == "mistral":
             llm = ChatMistralAI(model_name=model_name, **model_params)
