@@ -21,13 +21,27 @@ from langchain_core.outputs import ChatResult, ChatGeneration
 
 class DiddyLLMWrapper(BaseChatModel):
     """LangChain-compatible wrapper around DiddyAgent so it can be used wherever
-    a BaseChatModel is expected without bypassing DiddyAgent's logic."""
+    a BaseChatModel is expected without bypassing DiddyAgent's logic.
+
+    Bound tools (via bind_tools) are stored and forwarded to DiddyAgent.process_turn,
+    and tool_calls from the response are surfaced in the returned AIMessage so the
+    leaderboard harness can execute them normally.
+    """
 
     model_name: str = "diddy"
+    _bound_tools: List[Dict[str, Any]] = []
 
     @property
     def _llm_type(self) -> str:
         return "diddy"
+
+    def bind_tools(self, tools, **kwargs):
+        """Store tools so _generate can forward them to DiddyAgent."""
+        normalized = []
+        for t in tools:
+            normalized.append(t if isinstance(t, dict) else t.dict() if hasattr(t, "dict") else t)
+        self._bound_tools = normalized
+        return self
 
     def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs) -> ChatResult:
         import sys, os
@@ -42,13 +56,27 @@ class DiddyLLMWrapper(BaseChatModel):
             history.append({"role": role, "content": m.content})
 
         last_msg = messages[-1].content if messages else ""
+
+        # Forward bound tools so DiddyAgent can actually select them
+        available_tools = kwargs.get("tools", self._bound_tools or [])
+
         response_text, tool_calls, metadata = agent.process_turn(
             conversation_history=history,
-            available_tools=[],
+            available_tools=available_tools,
             current_user_message=last_msg,
         )
 
-        ai_msg = AIMessage(content=response_text)
+        # Convert DiddyAgent tool_calls to LangChain ToolCall format
+        lc_tool_calls = [
+            {
+                "name": tc["tool_name"],
+                "args": tc["parameters"],
+                "id": tc.get("tool_use_id", ""),
+            }
+            for tc in tool_calls
+        ]
+
+        ai_msg = AIMessage(content=response_text, tool_calls=lc_tool_calls)
         return ChatResult(generations=[ChatGeneration(message=ai_msg)])
 
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
